@@ -5,7 +5,7 @@ import React, { useRef, useEffect, useState } from "react";
 import logo from "../assets/logo.png"
 import axios from "axios";
 import JSZip from 'jszip';
-import { useHasFilesStore, useShowEditorStore, useShowGPTStore, useShowUploadStore } from "../activitiesStore"
+import { useHasFilesStore, useShowEditorStore, useShowGPTStore, useShowUploadStore, useFirstBuildStore } from "../activitiesStore"
 
 function Upload() {
     var hasFiles = useHasFilesStore((state) => state.hasFiles);
@@ -20,6 +20,9 @@ function Upload() {
     var showUpload = useShowUploadStore((state) => state.showUpload);
     const setShowUpload = useShowUploadStore((state) => state.setShowUpload);
     
+    var firstBuild = useFirstBuildStore((state) => state.firstBuild);
+    const setFirstBuild = useFirstBuildStore((state) => state.setFirstBuild);
+
     // let image1 = "https://reactaiblobs.blob.core.windows.net/reactaistorage/replicate.png"
     let image1 = "https://socialwebappblobs.blob.core.windows.net/blobs/replicate.png"
     const [progress, setProgress] = useState(0);
@@ -47,6 +50,7 @@ function Upload() {
         }
 
         await storeFiles(files);
+        setFirstBuild(true)
         setHasFiles(true)
         setShowEditor(true)
         setShowUpload(false)
@@ -324,11 +328,6 @@ function Upload() {
         }
     }
     
-
-      
-
-
-
     return (
         <div className="app">
             <div style={{ zIndex: 1, userSelect: "none", width: "100vw", height: "calc(100vh - 60px)", position: "fixed", objectFit: "contain", marginTop: "60px" }}>

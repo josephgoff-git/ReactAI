@@ -94,7 +94,6 @@ const ReactAI = () => {
   const [lineEditOperation, setLineEditOperation] = useState({})
   const [editorObject, setEditorObject] = useState({})
   const [monacoObject, setMonacoObject] = useState({})
-  let monacoObj = {}
   const [editorScrollbar, setEditorScrollbar] = useState("hidden")
   // "visible"
   const [error, setError] = useState("")
@@ -269,6 +268,8 @@ const ReactAI = () => {
 
   async function handleEditorDidMount(editor, monaco) {
     
+    console.log("First Build: ", firstBuild)
+    if (firstBuild) {setWarning(true)}
     const projectName = await handleBuild(); 
     // Once done building, open up App.js if it exists
     let appjs = null;
@@ -1038,7 +1039,7 @@ const ReactAI = () => {
          
           <div style={{width: "100%"}}>
             <button style={{width: "100%", whiteSpace: "nowrap", padding: "5px 10px", border: "1px solid white", color: "white", borderRadius: "7px", fontSize: "14px"}} 
-              className="prompt-button"
+              className="prompt-button hover-dim"
               onClick={()=>{handleExport()}}>
                 {exportText}
                 {displayWarningProgress && <div style={{ width: "100%", margin: "3px 0"}} className="progress-bar">
@@ -1053,7 +1054,7 @@ const ReactAI = () => {
           <div style={{marginTop: "15px", color: "white", fontSize: "16px", fontWeight: "400"}}>Current Model</div>     
          
           <button style={{whiteSpace: "nowrap",padding: "5px 10px", border: "1px solid white", color: "white", borderRadius: "7px", fontSize: "14px"}} 
-            className="prompt-button"
+            className="prompt-button hover-dim"
             onClick={()=>{switchModel()}}>
              gpt-{GPTModel}
           </button> 
@@ -1061,7 +1062,7 @@ const ReactAI = () => {
           <div style={{marginTop: "15px", color: "white", fontSize: "16px", fontWeight: "400"}}>Model Renders</div>     
          
          <button style={{whiteSpace: "nowrap",padding: "5px 10px", border: "1px solid white", color: "white", borderRadius: "7px", fontSize: "14px"}} 
-           className="prompt-button"
+           className="prompt-button hover-dim"
            onClick={()=>{
               let maxLimit = 4;
               if (numberOfRenders >= maxLimit) {
@@ -1082,7 +1083,7 @@ const ReactAI = () => {
          <div style={{marginTop: "15px", color: "white", fontSize: "16px", fontWeight: "400"}}>Model Temperature</div>     
          
          <button style={{display: "flex", justifyContent: "center", alignItems: "center", gap: "7px", flexDirection: "row", whiteSpace: "nowrap", padding: "5px 10px", border: "1px solid white", color: "white", borderRadius: "7px", fontSize: "14px"}} 
-           className="prompt-button"
+           className="prompt-button hover-dim"
            onClick={()=>{
               if (modelTemperature >= 0.9) {
                 setModelTemperature(0.1)
@@ -1169,10 +1170,10 @@ const ReactAI = () => {
           className="hover-dim question" 
           color="#999"
           style={{cursor: "pointer"}}/></div>
-          <div onClick={()=>{
+          <div className="hover-dim" onClick={()=>{
             setAIMode(AIMode === "ADD"? "ALTER" : "ADD")
-          }} style={{color: "white", cursor: "pointer", marginLeft: "12px", fontWeight: "500", opacity: 0.85, border: "0.5px solid #999", borderRadius: "6px", padding: "3px 8px"}}>
-            {AIMode}:
+          }} style={{color: "white", cursor: "pointer", marginLeft: "12px", fontWeight: "500", filter: "brightness(85%)", border: "0.5px solid #999", borderRadius: "6px", padding: "3.8px 8px", display: "flex", flexDirection: "row", gap: "4px"}}>
+            <p>{AIMode}</p> 
           </div>
           <input   
             id="userPrompt"
