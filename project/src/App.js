@@ -1,7 +1,7 @@
 import ReactAI from "./ReactAI/ReactAI"
 import Upload from "./Upload/Upload"
 import Header from "./Header/Header"
-import { useHasFilesStore, useShowEditorStore, useShowGPTStore, useShowUploadStore } from "./activitiesStore";
+import { useHasFilesStore, useShowEditorStore, useShowGPTStore, useShowUploadStore, useFirstBuildStore} from "./activitiesStore";
 import { useEffect } from "react";
 
 function App() {  
@@ -16,6 +16,9 @@ function App() {
 
   var showUpload = useShowUploadStore((state) => state.showUpload);
   const setShowUpload = useShowUploadStore((state) => state.setShowUpload);
+
+  var firstBuild = useFirstBuildStore((state) => state.firstBuild);
+  const setFirstBuild = useFirstBuildStore((state) => state.setFirstBuild);
 
   useEffect(()=>{   
      openIndexedDB()
@@ -35,6 +38,7 @@ function App() {
         if (db.objectStoreNames.length > 0) {
           setHasFiles(true)
           setShowUpload(false)
+          setFirstBuild(false)
         }
         resolve(true);
       };

@@ -19,23 +19,8 @@ import path from 'path-browserify';
         console.log("Created object store `files`");
       };
     });
-  }
-
-  export async function storeFile(filePath, fileContents) {
-    const blob = new Blob([fileContents]);
-
-    const fileData = {
-      filename: path.basename(filePath),
-      filepath: filePath,
-      content: blob, // Store Blob directly
-    };
-
-    const db = await openDatabase(); // Open or create the database
-    const transaction = db.transaction('files', 'readwrite');
-    const objectStore = transaction.objectStore('files');
-    await objectStore.put(fileData);
-  };
-
+  }  
+  
   export async function retrieveFilePaths() {
     return new Promise(async (resolve, reject) => {
       const db = await openDatabase(); // Open or create the database
@@ -53,6 +38,21 @@ import path from 'path-browserify';
       };
     });
   }
+
+  export async function storeFile(filePath, fileContents) {
+    const blob = new Blob([fileContents]);
+
+    const fileData = {
+      filename: path.basename(filePath),
+      filepath: filePath,
+      content: blob, // Store Blob directly
+    };
+
+    const db = await openDatabase(); // Open or create the database
+    const transaction = db.transaction('files', 'readwrite');
+    const objectStore = transaction.objectStore('files');
+    await objectStore.put(fileData);
+  };
 
   export async function retrieveFileTree() {
     let filePaths = await retrieveFilePaths();

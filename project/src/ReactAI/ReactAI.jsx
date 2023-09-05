@@ -23,8 +23,8 @@ import { BsQuestionCircle } from 'react-icons/bs';
 import { SiReact } from 'react-icons/si';
 import { BsCalculator, BsChevronDown } from 'react-icons/bs'
 import { IoChevronBack, IoClose } from 'react-icons/io5'
-import { useHasFilesStore, useShowEditorStore, useShowGPTStore } from "../activitiesStore"
-import { openDatabase, storeFile, retrieveFilePaths, retrieveFileTree, retrieveFileByPath, retrieveTreeNodeByPath, resolvePath, resolvePackage } from "../fileUtils.js"
+import { useHasFilesStore, useShowEditorStore, useShowGPTStore, useFirstBuildStore } from "../activitiesStore"
+import { openDatabase, storeFile, retrieveFileTree, retrieveFileByPath, retrieveFilePaths, retrieveTreeNodeByPath, resolvePath, resolvePackage } from "../fileUtils.js"
 
 const binaryFileTypes = ['svg', 'png', 'jpg', 'jpeg'];
 const staticFileTypes = {
@@ -74,13 +74,16 @@ const ReactAI = () => {
 
   var showGPT = useShowGPTStore((state) => state.showGPT);
   const setShowGPT = useShowGPTStore((state) => state.setShowGPT);
+  
+  var firstBuild = useFirstBuildStore((state) => state.firstBuild);
+  const setFirstBuild = useFirstBuildStore((state) => state.setFirstBuild);
 
   const [hasRunOnce, setHasRunOnce] = useState(false)
   const [AIResults, setAIResults] = useState([])
   const [currentFrame, setCurrentFrame] = useState(0)
   const [editorCurrent, setEditorCurrent] = useState("")
   const [AIMode, setAIMode] = useState("ADD")
-  const [warning, setWarning] = useState(true)
+  const [warning, setWarning] = useState(false)
   const [warningText1, setWarningText1] = useState("Storing Project Files...")
   const [warningText2, setWarningText2] = useState("Please wait, this may take a few minutes")
   const [warningText3, setWarningText3] = useState("")
@@ -91,23 +94,30 @@ const ReactAI = () => {
   const [lineEditOperation, setLineEditOperation] = useState({})
   const [editorObject, setEditorObject] = useState({})
   const [monacoObject, setMonacoObject] = useState({})
+  let monacoObj = {}
   const [editorScrollbar, setEditorScrollbar] = useState("hidden")
   // "visible"
   const [error, setError] = useState("")
   const [progress, setProgress] = useState(0);
+  const [storingProgress, setStoringProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  
+  const [canCloseWarning, setCanCloseWarning] = useState(false)
+  const [renderButtonWidths, setRenderButtonWidths] = useState("25%")
+
   // AI States
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loading, setLoading] = useState("");
   const [GPTModel, setGPTModel] = useState("3.5-turbo")
+  const [numberOfRenders, setNumberOfRenders] = useState(4)
+  const [modelTemperature, setModelTemperature] = useState(0.5)
   
   // File Upload States
   const [originalFile, setOriginalFile] = useState("");
   const [exportText, setExportText] = useState("Export")
+  const [displayWarningProgress, setDisplayWarningProgress] = useState(false)
 
   // Display References
   const editorRef = useRef(null);
@@ -115,7 +125,6 @@ const ReactAI = () => {
   const loaderRef = useRef(null); 
   const formRef = useRef(null);
   const uploadRef = useRef(null);
-
 
   // DISPLAY FILE TREE
   const [tree, setTree] = useState({ "React Project": {}  })
@@ -154,7 +163,110 @@ const ReactAI = () => {
     );
   };
 
-  // EDITOR FUNCTIONS
+  async function retrieveFilePaths2() {
+    return new Promise(async (resolve, reject) => {
+      const db = await openDatabase(); // Open or create the database
+      const transaction = db.transaction('files', 'readonly');
+      const objectStore = transaction.objectStore('files');
+  
+      // Get Count
+      let fileCount = 37000;
+      let number = 0;
+      const countRequest = objectStore.count();
+      countRequest.onsuccess = async event => {
+        fileCount = event.target.result;
+      };
+  
+      // Retrieve all files
+      const request = objectStore.openCursor(); // Use a cursor instead of getAllKeys()
+      const progressInterval = 1200; 
+      let lastUpdateTime = Date.now();
+  
+      const processedFiles = [];
+      let ranOneTime = false
+
+      request.onsuccess = event => {
+        if (!ranOneTime) {
+          setWarningText1("Retrieving Project Files...")
+          setDisplayWarningProgress(true)
+          ranOneTime = true
+        }
+
+        const cursor = event.target.result;
+        if (cursor) {
+          processedFiles.push(cursor.key);
+          number++;
+  
+          // Update progress every 'progressInterval' milliseconds
+          const currentTime = Date.now();
+          if (currentTime - lastUpdateTime >= progressInterval) {
+            const progress = (number / fileCount) * 100;
+            setStoringProgress(progress)
+            // console.log(`Progress: ${progress.toFixed(2)}%`);
+            lastUpdateTime = currentTime;
+          }
+  
+          // Move to the next item
+          cursor.continue();
+        } else {
+          // All files have been processed
+          resolve(processedFiles);
+        }
+      };
+  
+      request.onerror = event => {
+        reject('Error retrieving files');
+      };
+    });
+  }
+
+  // EDITOR FUNCTIONS 
+  const decorationIdsRef = useRef([]);
+  const handleCursorPositionChange = () => {
+    if (editorRef.current) {
+      const editor = editorRef.current;
+      const selection = editor.getSelection();
+      if (selection) {
+        const startLineNumber = selection.startLineNumber;
+
+        // Remove previous decorations using the decorationIdsRef.current
+        editor.deltaDecorations(decorationIdsRef.current, []);
+
+        // Add a new decoration
+        const newDecoration = {
+          range: new monacoObject.Range(startLineNumber, 1, startLineNumber, 1),
+          options: {
+            isWholeLine: true,
+            className: 'line-bar-decoration',
+          },
+        };
+
+        // Apply the new decoration and update decorationIdsRef.current
+        const newDecorationIds = editor.deltaDecorations([], [newDecoration]);
+        decorationIdsRef.current = newDecorationIds;
+
+        // Perform any other actions you need to do for the new cursor position
+        setLinePosition({ startLineNumber: startLineNumber - 1, column: 1 });
+        setLineEditOperation({
+          range: new monacoObject.Range(startLineNumber, 0, startLineNumber, 0),
+          text: '/* Insert AI generated code */\n',
+          forceMoveMarkers: true,
+        });
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (editorRef.current) {
+      const editor = editorRef.current;
+      const disposable = editor.onDidChangeCursorSelection(handleCursorPositionChange);
+
+      return () => {
+        disposable.dispose();
+      };
+    }
+  }, [editorRef.current]);
+
   async function handleEditorDidMount(editor, monaco) {
     
     const projectName = await handleBuild(); 
@@ -166,33 +278,11 @@ const ReactAI = () => {
       await handleFileOpen(`${projectName}/src/App.js`)
     }
 
-    let decorationIds = [];
+    // let decorationIds = [];
     editorRef.current = editor;
-    editor.onMouseDown((e) => {
-      // User clicked editor -> Set all states
-      const position = e.target.position;
-      const lineNumber = position.lineNumber === null? 0 : position.lineNumber;
-      setLinePosition({ lineNumber: lineNumber - 1, column: 1 })
-      setLineEditOperation({
-        range: new monaco.Range(lineNumber, 0, lineNumber, 0),
-        text:  "\n/*   Insert  AI generated code here   */\n\n",
-        forceMoveMarkers: true,
-      })
-      setEditorObject(editor)
-      setMonacoObject(monaco)
 
-      // Add a CSS bar across top of selected line
-      editorRef.current.deltaDecorations(decorationIds, []);
-      const decoration = {
-        range: new monaco.Range(lineNumber, 1, lineNumber, 1),
-        options: {
-          isWholeLine: true,
-          className: 'line-bar-decoration',
-        },
-      };
-      decorationIds = editorRef.current.deltaDecorations([], [decoration]);
-      
-    });
+    setEditorObject(editor)
+    setMonacoObject(monaco)
   }
 
   async function moneyyy(event) {
@@ -256,9 +346,8 @@ const ReactAI = () => {
 
     // Create a full prompt for the AI
     let userMessage = "";
-    console.log(AIMode)
     if (AIMode === "ADD") {
-      userMessage = "Here is a jsx file from my React project. Please locate this comment in code that says exactly: {/*   Insert  AI generated code here   */}, and then return to me a snippet of code meant to replace that coment based on these instructions: Add "
+      userMessage = "Here is a jsx file from my React project. Please locate this comment in code that says exactly: {/* Insert  AI generated code */}, and then return to me a snippet of code meant to replace that coment based on these instructions: Add "
       + prompt 
       + ". Please don't return the entire file. Only return the code to replace that comment! Make sure your response only contains code and nothing else. Here is the jsx file: \n\n" 
       + editorRef.current.getValue()
@@ -267,106 +356,60 @@ const ReactAI = () => {
       + ". Return the FULL jsx code for the file back to me. Here's the jsx file: " 
       + editorRef.current.getValue()
     } 
-    console.log(userMessage)
-
     
-    // setMessages((prevMessages) => [...prevMessages, { text: userMessage, isBot: false }]);
     setIsLoading(true);
 
-    // Wait for AI return message and replace code in editor
-    // try {
-    //   let botMessage = await getMessage([...messages, { text: userMessage, isBot: false }]);
-    //   botMessage = extractCode(botMessage)
-    //   if (editorRef.current) {
-    //     if (AIMode === "ADD") {
-    //       botMessage = findAndReplace(editorRef.current.getValue(), botMessage)
-    //     }
-    //     let editor = editorRef.current;
-    //     // let newPosition = editor.getPosition(); // Get current cursor position
-    //     let editOperations = [{
-    //       range: editor.getModel().getFullModelRange(),
-    //       text: botMessage,
-    //     }];
+    // Wait for AI return messages and replace code in editor 
+    const requests = [
+      getMessage([{ text: userMessage, isBot: false }]),
+      getMessage([{ text: userMessage, isBot: false }]),
+      getMessage([{ text: userMessage, isBot: false }]),
+      getMessage([{ text: userMessage, isBot: false }])
+    ];
 
-    //     editor.executeEdits("my-source", editOperations);
-    //     editor.pushUndoStop();
-    //     editorRef.current.setValue(botMessage)
-    //   }
-      
-    //   setMessages((prevMessages) => [...prevMessages, { text: botMessage, isBot: true }]);
-    // } catch (error) {
-    //   console.error(error);
-    //   setMessages((prevMessages) => [...prevMessages, { text: "Something went wrong...", isBot: true }]);
-    // } 
-
-  
-      const requests = [
-        getMessage([{ text: userMessage, isBot: false }]),
-        getMessage([{ text: userMessage, isBot: false }]),
-        getMessage([{ text: userMessage, isBot: false }]),
-        getMessage([{ text: userMessage, isBot: false }])
-      ];
-
-      try {
-        let editorCode = editorRef.current.getValue()
-        const results = await Promise.all(requests);
-        let AIArray = [];
-        for (let i=0;i<requests.length;i++) {
-          let response = results[i]
-          if (AIMode === "ALTER") {response = extractCode(response)}
-          let newContent = "";
-          if (AIMode === "ADD") {newContent = findAndReplace(editorCode, response)}
-          if (AIMode === "ALTER") {newContent = response}
-          AIArray.push(newContent)
-          if (editorRef.current) {
-            if (i === 0) {
-              editorRef.current.setValue(newContent);}
-              setCurrentFrame(1)
-            }
-        }
-        setAIResults(AIArray)
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        setIsSubmitting(false)
+    try {
+      let editorCode = editorRef.current.getValue()
+      const results = await Promise.all(requests);
+      let AIArray = [];
+      for (let i=0;i<requests.length;i++) {
+        let response = results[i]
+        if (AIMode === "ALTER") {response = extractCode(response)}
+        let newContent = "";
+        if (AIMode === "ADD") {newContent = findAndReplace(editorCode, response)}
+        if (AIMode === "ALTER") {newContent = response}
+        AIArray.push(newContent)
+        if (editorRef.current) {
+          if (i === 0) {
+            editorRef.current.setValue(newContent);}
+            setCurrentFrame(1)
+          }
       }
+      setAIResults(AIArray)
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      setIsSubmitting(false)
+    }
 
-    // try {
-    //   // let botMessage = await getMessage([...messages, { text: userMessage, isBot: false }]);
-    //   let botMessage = await getMessage([{ text: userMessage, isBot: false }]);
-    //   console.log(botMessage)
-    //   if (AIMode === "ALTER") {botMessage = extractCode(botMessage)}
-    //   console.log(botMessage)
-    //   if (editorRef.current) {
-    //     let newContent = "";
-    //     if (AIMode === "ADD") {newContent = findAndReplace(editorRef.current.getValue(), botMessage)}
-    //     if (AIMode === "ALTER") {newContent = botMessage}
-    //     editorRef.current.setValue(newContent);
-    //     // let editOperations = [{
-    //     //   range: editorRef.current.getModel().getFullModelRange(),
-    //     //   text: botMessage,
-    //     // }];
+    // Back Space
+    // editorRef.current.setValue(newContent);
+    // let editOperations = [{
+    //   range: editorRef.current.getModel().getFullModelRange(),
+    //   text: botMessage,
+    // }];
 
-    //     // editorRef.current.executeEdits("my-source", editOperations);
-    //     // editorRef.current.pushUndoStop();
-    //     // editorRef.current.setValue(botMessage)
+    // editorRef.current.executeEdits("my-source", editOperations);
+    // editorRef.current.pushUndoStop();
+    // editorRef.current.setValue(botMessage)
 
-    //     // let editOperations = [{
-    //     //   range: editor.getModel().getFullModelRange(),
-    //     //   text: botMessage,
-    //     // }];
+    // let editOperations = [{
+    //   range: editor.getModel().getFullModelRange(),
+    //   text: botMessage,
+    // }];
 
-    //     // editor.executeEdits("my-source", editOperations);
-    //     // editor.pushUndoStop();
-    //   }
-    //   // setMessages((prevMessages) => [...prevMessages, { text: botMessage, isBot: true }]);
-    // } catch (error) {
-    //   console.error(error);
-    //   // setMessages((prevMessages) => [...prevMessages, { text: "Something went wrong...", isBot: true }]);
-    // } 
+    // editor.executeEdits("my-source", editOperations);
+    // editor.pushUndoStop();
 
-
-
-    // Auto re-format the new code
+    // Auto reformat the new code
     monacoAutoformat()
     const moneyyy = await handleBuild(); 
     setHasRunOnce(true)
@@ -386,7 +429,7 @@ const ReactAI = () => {
       body: JSON.stringify({
         model: `gpt-${GPTModel}`,
         messages: formattedMessages,
-        temperature: 0.8,
+        temperature: modelTemperature,
         // max_tokens: 1500,
         // functions: [
         //   {
@@ -428,8 +471,8 @@ const ReactAI = () => {
   }
 
   function findAndReplace(code, replacement) {
-    const regex = /\/\*\s*Insert\s*AI\s*generated\s*code\s*here\s*\*\/\s*/;
-    const updatedCode = code.replace(regex, replacement + "\n\n");
+    const regex = /\/\*\s*Insert\s*AI\s*generated\s*code\s*\*\/\s*/;
+    const updatedCode = code.replace(regex, replacement + "\n");
     return updatedCode;
   }
 
@@ -457,7 +500,11 @@ const ReactAI = () => {
   const handleBuild = async () => {
     try {
       console.log("getting file paths")
-      let filePaths = await retrieveFilePaths();
+      let filePaths = await retrieveFilePaths()
+      if (firstBuild) {
+        setWarning(true)
+        filePaths = await retrieveFilePaths2()
+      } else {filePaths = await retrieveFilePaths();}
       console.log("got file paths")
       let fileTree = await retrieveFileTree();
       console.log("got file tree")
@@ -694,6 +741,9 @@ const ReactAI = () => {
       setPrompt("")
       setLineEditOperation({})
       setIsSubmitting(false)
+      setCanCloseWarning(true)
+      setDisplayWarningProgress(false)
+      setFirstBuild(false);
       return projectName
     } catch (error) {
       console.log(error)
@@ -702,6 +752,9 @@ const ReactAI = () => {
       console.log(location)
       setWarningText3("AI suggests: " + location)
       setIsSubmitting(false)
+      setCanCloseWarning(true)
+      setDisplayWarningProgress(false)
+      setFirstBuild(false);
     }
   }
 
@@ -829,35 +882,36 @@ const ReactAI = () => {
     }
   }
 
-
-
-  // Close the alert
+  // CLOSE ALERTS 
   let outsideClicks = 0;
   function handleOutsideClick() {
-    if (outsideClicks !== 0) {
-      setWarningText3("")
-      setWarning(false)
-      setDotsOpen(false)
-      outsideClicks = 0;
-    } else {outsideClicks += 1}
+    if (canCloseWarning) { 
+      if (outsideClicks !== 0) {
+        setWarningText3("")
+        setWarning(false)
+        setDotsOpen(false)
+        outsideClicks = 0;
+      } else {outsideClicks += 1}
+    }
   };
 
-  // Close the options menu
   let outsideClicks2 = 0;
   function handleOutsideClick2() {
-    if (outsideClicks2 !== 0) {
-      setDotsOpen(false)
-      outsideClicks2 = 0;
-    } else {outsideClicks2 += 1}
+    if (canCloseWarning) { 
+      if (outsideClicks2 !== 0) {
+        setDotsOpen(false)
+        outsideClicks2 = 0;
+      } else {outsideClicks2 += 1}
+    }
   };
 
+  // SETTINGS 
   function switchModel() {
     if (GPTModel === "4") {
       setGPTModel("3.5-turbo")
     } else {setGPTModel("4")}
   }
 
-  // EXPORT
   async function handleExport() {
     setIsUploading(true)
     setExportText("Exporting Zip...");
@@ -946,18 +1000,23 @@ const ReactAI = () => {
   return (
     <div style={{width: "100vw", marginTop: "60px", height: "calc(100vh - 60px)", position: "fixed"}}>
       
+      {/* Alert Message */}
       {warning && <div style={{position: "absolute", height: "100%", width: "100vw", zIndex: 999}}>
         <div style={{ppointerEvents: warning? "none" : "all", position: "absolute", height: "100%", width: "100%", backgroundColor: "black", opacity: 0.8}}></div>
         <div style={{position: "absolute", height: "100%", width: "100%", display: "flex", justifyContent: "center", alignItems: "center"}}>
           <OutsideClickDetector onOutsideClick={() => {handleOutsideClick()}}>
             <div style={{position: "relative", marginTop: "-15vh", height: "260px", width: "400px", borderRadius: "15px", backgroundColor: "black", border: "1px solid white", display: "flex", justifyContent: "center", alignItems: "center", flexDirection: "column", gap: "4px"}}>
-              <div className="hover-dim" style={{position: "absolute", top: "10px", right: "10px", cursor: "pointer"}} onClick={()=>{setWarning(false); setWarningText3("")}} ><IoClose color="white" size={35}/></div>
+              {canCloseWarning && <div className="hover-dim" style={{position: "absolute", top: "10px", right: "10px", cursor: "pointer"}} onClick={()=>{setWarning(false); setWarningText3("")}} ><IoClose color="white" size={35}/></div>}
               <div style={{width: "80%", color: "white", fontSize: "30px", fontWeight: "bold", textAlign: "center"}}>
                 {warningText1}
               </div>
               <div style={{width: "80%", color: "#999", fontSize: "20px", fontWeight: "100", textAlign: "center"}}>
                 {warningText2}
               </div>
+              {displayWarningProgress && <div style={{width: "76%", margin: "3px 0"}} className="progress-bar">
+                <div className="progress" style={{ width: `${storingProgress}%` }}>
+                </div>
+              </div>}
               <div style={{width: "80%", color: "white", fontSize: "20px", fontWeight: "100", textAlign: "center"}}>
                 {warningText3}
               </div>
@@ -966,7 +1025,11 @@ const ReactAI = () => {
         </div>
       </div>}
 
-     
+      {/* Clean Up */}
+      <div style={{position: "absolute", height: "24.5px", width: "20px", right: "50vw", zIndex: 990, backgroundColor: "black"}}>
+      </div>
+
+      {/* Settings Window */}
       {dotsOpen &&  <OutsideClickDetector onOutsideClick={() => {handleOutsideClick2()}}>
         <div style={{position: "absolute", right: 0, height: "calc(100% - 41px)", width: "50%", bottom: "41px", backgroundColor: "black", borderLeft: "1px solid white", zIndex: 998, display: "flex", flexDirection: "column", gap: "10px", padding: "20px 17px", paddingTop: "30px"}}>
           <div className="hover-dim" style={{position: "absolute", top: "10px", right: "10px", cursor: "pointer"}} onClick={()=>{setDotsOpen(false)}} ><IoClose color="white" size={35}/></div>
@@ -978,7 +1041,7 @@ const ReactAI = () => {
               className="prompt-button"
               onClick={()=>{handleExport()}}>
                 {exportText}
-                {isUploading && <div style={{ width: "100%", margin: "3px 0"}} className="progress-bar">
+                {displayWarningProgress && <div style={{ width: "100%", margin: "3px 0"}} className="progress-bar">
                 <div className="progress" style={{ width: `${progress}%` }}>
                 </div>
                 </div>}
@@ -995,11 +1058,47 @@ const ReactAI = () => {
              gpt-{GPTModel}
           </button> 
 
+          <div style={{marginTop: "15px", color: "white", fontSize: "16px", fontWeight: "400"}}>Model Renders</div>     
+         
+         <button style={{whiteSpace: "nowrap",padding: "5px 10px", border: "1px solid white", color: "white", borderRadius: "7px", fontSize: "14px"}} 
+           className="prompt-button"
+           onClick={()=>{
+              let maxLimit = 4;
+              if (numberOfRenders >= maxLimit) {
+                setRenderButtonWidths("100%")
+                setNumberOfRenders(1)
+              } else { 
+                if (numberOfRenders === 1) {setRenderButtonWidths("50%")}
+                else if (numberOfRenders === 2) {setRenderButtonWidths("33.33%")}
+                else if (numberOfRenders === 3) {setRenderButtonWidths("25%")}
+                setNumberOfRenders(numberOfRenders + 1) 
+              }
+
+            }}>
+             <p style={{fontSize: "16px"}}>{numberOfRenders}</p>
+         </button> 
+         
+
+         <div style={{marginTop: "15px", color: "white", fontSize: "16px", fontWeight: "400"}}>Model Temperature</div>     
+         
+         <button style={{display: "flex", justifyContent: "center", alignItems: "center", gap: "7px", flexDirection: "row", whiteSpace: "nowrap", padding: "5px 10px", border: "1px solid white", color: "white", borderRadius: "7px", fontSize: "14px"}} 
+           className="prompt-button"
+           onClick={()=>{
+              if (modelTemperature >= 0.9) {
+                setModelTemperature(0.1)
+              } else { 
+                setModelTemperature(parseFloat((modelTemperature + 0.1).toFixed(1)));
+              }
+           }}>
+            <p style={{marginTop: "-1px", fontSize: "16px"}}>{modelTemperature}</p>
+            <p style={{fontSize: "13px", color: "#888"}}>{modelTemperature > 0.6? "HIGH" : modelTemperature > 0.3? "MODERATE" : "LOW"}</p>
+         </button> 
+
         </div>
       </OutsideClickDetector>}
 
-      <div  style={{zIndex: 1, width: "50vw", height: "calc(100% - 41px)", position: "absolute"}}>
-        <div style={{height: "100%", width: "100%", position: "absolute", display: "flex", flexDirection: "row"}}> 
+      {/* Editor & Sidebar */}
+      <div style={{zIndex: 1, width: "calc(50vw + 30px)", height: "calc(100% - 41px)", position: "absolute", display: "flex", flexDirection: "row"}}> 
           <div style={{width: sidebar? "150px" : "50px", height: "100%", backgroundColor: "black", borderRight: "0.1px solid white", display: "flex", flexDirection: "column", alignItems: "center"}}>
             {sidebar === false && <FaBars color="white" size={"21px"} style={{marginTop: "10px", cursor: "pointer"}} onClick={()=>{handleSidebar()}}/>}
             {sidebar && <IoChevronBack color="white" size={"25px"} style={{marginTop: "8px", marginLeft: "-112px", cursor: "pointer"}} onClick={()=>{handleSidebar()}}/>}
@@ -1035,7 +1134,12 @@ const ReactAI = () => {
             </div>
             <div onClick={()=>{setDotsOpen(false)}} style={{height: "calc(100% - 25px)", paddingTop: "6px", backgroundColor: "black"}}>
               <Editor
-                onChange={()=>{let fileOpened = openFileNum; handleEditorChange(fileOpened)}}
+                id="editor"
+                ref={editorRef}
+                onChange={()=>{
+                  let fileOpened = openFileNum; 
+                  handleEditorChange(fileOpened)
+                }}
                 height="100%"
                 defaultLanguage = {openFileNum === null ?  "javascript" : file.language}
                 value = {openFileNum === null ?  "" : file.value}
@@ -1049,21 +1153,19 @@ const ReactAI = () => {
                   wordWrap: "off",  
                   scrollBeyondLastLine: false,  
                   scrollbar: {
-                    vertical: {editorScrollbar},
-                    horizontal: {editorScrollbar},
+                    vertical: "hidden",
+                    horizontal: "hidden",
                   },
                 }}
                 />
               </div>
           </div>
-        </div>
       </div>
 
-      <div ref={frameRef} style={{width: "50vw", marginLeft: "50vw", height: "calc(100% - 41px)", backgroundColor: "black", borderLeft: "0.1px solid white"}}>
-      </div>
-
+      {/* Bottom Bar */}
       <div style={{zIndex: 2, backgroundColor: "black", borderTop: "0.1px solid white", position: "absolute", bottom: 0, left: 0, paddingLeft: "14px", height: "40px", width: "100vw", display: "flex", flexDirection: "row", borderTop: "0.1px solid black", gap: "6px", alignItems: "center"}}>
-          <div style={{fontSize:"19px", height: "100%", display: "flex", alignItems: "center"}}><BsQuestionCircle 
+          <div style={{fontSize:"19px", height: "100%", display: "flex", alignItems: "center"}}>
+          <BsQuestionCircle 
           className="hover-dim question" 
           color="#999"
           style={{cursor: "pointer"}}/></div>
@@ -1105,43 +1207,52 @@ const ReactAI = () => {
               onClick={handleBuild}
             /> 
           </div>
-          {hasRunOnce && <button style={{marginLeft: "15px", opacity: currentFrame === 1? 1 : 0.7, padding: "5px 10px", border: "1px solid white", color: "white", borderRadius: "4px", fontSize: "12px"}} 
-            className="prompt-button"
-            onClick={()=>{handleFrameChange(1)}}>
-            1st 
-          </button>}
-          {hasRunOnce && <button style={{opacity: currentFrame === 2? 1 : 0.7, padding: "5px 10px", border: "1px solid white", color: "white", borderRadius: "4px", fontSize: "12px"}} 
-            className="prompt-button"
-            onClick={()=>{handleFrameChange(2)}}>
-            2nd
-          </button>}
-          {hasRunOnce && <button style={{opacity: currentFrame === 3? 1 : 0.7, padding: "5px 10px", border: "1px solid white", color: "white", borderRadius: "4px", fontSize: "12px"}} 
-            className="prompt-button"
-            onClick={()=>{handleFrameChange(3)}}>
-            3rd 
-          </button> }
-          {hasRunOnce && <button style={{opacity: currentFrame === 4? 1 : 0.7, padding: "5px 10px", border: "1px solid white", color: "white", borderRadius: "4px", fontSize: "12px"}} 
-            className="prompt-button"
-            onClick={()=>{handleFrameChange(4)}}>
-            4th
-          </button> }
-          {hasRunOnce && <button title="Revert" style={{marginLeft: "15px", border: "1px solid white", color: "white", borderRadius: "6px", fontSize: "12px", display: "flex", justifyContent: "center", alignItems: "center"}} 
-            className="prompt-button"
-            onClick={()=>{handleFrameChange(0)}}>
-            <IoChevronBack color="white" size={"25px"} style={{marginLeft: "-3px"}}/>
-          </button>}
-
           <div style={{fontSize: "19px", height: "100%", width: "auto", display: "flex", alignItems: "center"}}>
-          <BsThreeDotsVertical title="Options" 
-            className="hover-dim" color="white" 
-            style={{marginRight: "8px", cursor: "pointer"}}
-            onClick={() => {setDotsOpen(!dotsOpen)}}
-          />
+            <BsThreeDotsVertical title="Options" 
+              className="hover-dim" color="white" 
+              style={{marginRight: "8px", cursor: "pointer"}}
+              onClick={() => {setDotsOpen(!dotsOpen)}}
+            />
           </div>
+      </div>
+
+      {/* Display */}
+      <div style={{zIndex: 10, position: "absolute", width: "50vw", marginLeft: "50vw", height: "calc(100% - 41px)", backgroundColor: "black", borderLeft: "0.1px solid white"}}>
+        {hasRunOnce && <div style={{width: "100%", backgroundColor: "black", height: "25px", borderBottom: "1px solid white", display: "flex", flexDirection: "row"}}>
+          <div title="Revert" style={{width: "25px", borderRight: "1px solid white", color: "white", fontSize: "12px", display: "flex", justifyContent: "center", alignItems: "center"}} 
+            className="prompt-button hover-dim"
+            onClick={()=>{handleFrameChange(0)}}>
+            <IoChevronBack color="white" size={"25px"}/>
+          </div>
+          <div style={{width: "calc(100% - 25px)", height: "100%", display: "flex", flexDirection: "row", backgroundColor: "black"}}>
+            {numberOfRenders !== 1 && <div style={{userSelect: "none", cursor: "pointer", display: "flex", justifyContent: "center", alignItems: "center", width: renderButtonWidths, height: "100%", filter: currentFrame === 1? "brightness(80%)" : "brightness(45%)", borderRight: "1px solid white", color: "white", fontSize: "19px"}} 
+              className={` ${currentFrame === 1 ? "prompt-button" : "prompt-button hover-dim"}`}
+              onClick={()=>{handleFrameChange(1)}}> 
+              1
+            </div>}
+            {numberOfRenders >= 2 && <div style={{userSelect: "none", cursor: "pointer", display: "flex", justifyContent: "center", alignItems: "center", width: renderButtonWidths, height: "100%", filter: currentFrame === 2? "brightness(80%)" : "brightness(45%)", borderRight: "1px solid white", color: "white", fontSize: "19px"}} 
+              className={` ${currentFrame === 2 ? "prompt-button" : "prompt-button hover-dim"}`}
+              onClick={()=>{handleFrameChange(2)}}>
+              2
+            </div>}
+            {numberOfRenders >= 3 && <div style={{userSelect: "none", cursor: "pointer", display: "flex", justifyContent: "center", alignItems: "center", width: renderButtonWidths, height: "100%", filter: currentFrame === 3? "brightness(80%)" : "brightness(45%)", borderRight: "1px solid white", color: "white", fontSize: "19px"}} 
+              className={` ${currentFrame === 3 ? "prompt-button" : "prompt-button hover-dim"}`}
+              onClick={()=>{handleFrameChange(3)}}>
+              3
+            </div> }
+            {numberOfRenders >= 4 && <div style={{userSelect: "none", cursor: "pointer", display: "flex", justifyContent: "center", alignItems: "center", width: renderButtonWidths, height: "100%", filter: currentFrame === 4? "brightness(80%)" : "brightness(45%)", color: "white", fontSize: "19px"}} 
+              className={` ${currentFrame === 4 ? "prompt-button" : "prompt-button hover-dim"}`}
+              onClick={()=>{handleFrameChange(4)}}>
+              4
+            </div> }
+          </div>
+        </div>}
+        <div ref={frameRef} style={{width: "100%", height: hasRunOnce ? "calc(100% - 25px)" : "100%", backgroundColor: "black"}}>
         </div>
+      </div>
+      
     </div>
-  
-);
+  );
 };
 
 export default ReactAI;

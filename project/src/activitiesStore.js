@@ -20,4 +20,9 @@ export const useShowUploadStore = create((set) => ({
   setShowUpload: (newShowUpload) => set({ showUpload: newShowUpload }),
 }));
 
+export const useFirstBuildStore = create((set) => ({
+  firstBuild: true,
+  setFirstBuild: (newFirstBuild) => set({ firstBuild: newFirstBuild }),
+}));
+
 
