@@ -80,7 +80,7 @@ const GPT = () => {
     const options = {
       method: 'POST',
       headers: {
-        'Authorization': "Bearer ",
+        'Authorization': "Bearer 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",
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
