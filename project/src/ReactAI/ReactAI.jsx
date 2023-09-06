@@ -507,9 +507,10 @@ const ReactAI = () => {
         filePaths = await retrieveFilePaths2()
       } else {filePaths = await retrieveFilePaths();}
       console.log("got file paths")
+      console.log(filePaths)
       let fileTree = await retrieveFileTree();
       console.log("got file tree")
-
+      console.log(fileTree)
       let projectName = filePaths[0].split("/")[0];
 
 
@@ -750,7 +751,6 @@ const ReactAI = () => {
       console.log(error)
       giveWarning("Error", "View console for error message from your code: Right Click > Inspect > Console", "User Close")
       let location = await askGPT("Here's an error from my React app. Return back to me one of two things. Return 'App.js' if you're unsure what file is causing the error. If you think you know the name of the file causing the error, then return the name of that file back to me, and NOTHING else. Here is the error message: " + error)
-      console.log(location)
       setWarningText3("AI suggests: " + location)
       setIsSubmitting(false)
       setCanCloseWarning(true)
