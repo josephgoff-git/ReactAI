@@ -424,7 +424,7 @@ const ReactAI = () => {
     const options = {
       method: 'POST',
       headers: {
-        'Authorization': "Bearer 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",   
+        'Authorization': "Bearer ",   
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
