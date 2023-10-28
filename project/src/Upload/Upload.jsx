@@ -5,7 +5,9 @@ import { GrReactjs } from "react-icons/gr"
 import React, { useRef, useEffect, useState } from "react";
 import axios from "axios";
 import JSZip from 'jszip';
-import { useHasFilesStore, useShowEditorStore, useShowGPTStore, useShowUploadStore, useFirstBuildStore } from "../activitiesStore"
+import { openDatabase } from "../fileUtils.js"
+import { useProjectTitleStore, useClickedNewAppStore, useHasFilesStore, useShowEditorStore, useShowGPTStore, useShowUploadStore, useFirstBuildStore } from "../activitiesStore"
+
 
 function Upload() {
     var hasFiles = useHasFilesStore((state) => state.hasFiles);
@@ -23,14 +25,20 @@ function Upload() {
     var firstBuild = useFirstBuildStore((state) => state.firstBuild);
     const setFirstBuild = useFirstBuildStore((state) => state.setFirstBuild);
 
+    var clickedNewApp = useClickedNewAppStore((state) => state.clickedNewApp);
+    const setClickedNewApp = useClickedNewAppStore((state) => state.setClickedNewApp);
+
+    var projectTitle = useProjectTitleStore((state) => state.projectTitle);
+    const setProjectTitle = useProjectTitleStore((state) => state.setProjectTitle);
+  
     // let image1 = "https://reactaiblobs.blob.core.windows.net/reactaistorage/replicate.png"
-    let image1 = "https://socialwebappblobs.blob.core.windows.net/blobs/replicate.png"
+    let image1 = "https://socialwebappblobs.blob.core.windows.net/blobs/replicate-ice.png"
     const [progress, setProgress] = useState(0);
     const [isUploading, setIsUploading] = useState(false)
     const [openProject, setOpenProject] = useState("Open Project")
     const fileInputRef = useRef(null);
     const [smallScreen, setSmallScreen] = useState(window.innerWidth < 800 ? true : false);
-    const [createAppText, setCreateAppText] = useState("Create React App")
+    const [createAppText, setCreateAppText] = useState("Create New App")
     const [gitImportText, setGitImportText] = useState("Import From GitHub")
 
     // UPLOAD PROJECT 
@@ -42,7 +50,7 @@ function Upload() {
         const db = await openDatabase(); 
         const transaction = db.transaction('files', 'readwrite');
         const objectStore = transaction.objectStore('files');
-        await objectStore.clear();
+        // await objectStore.clear();
         console.log("Cleared database");
 
         const files = projectInput.files;
@@ -63,27 +71,6 @@ function Upload() {
         setShowUpload(false)
     };
 
-    async function openDatabase() {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open('ReactProjectsDatabase', 1);
-
-            request.onerror = event => {
-                reject('Error opening database');
-            };
-
-            request.onsuccess = event => {
-                const db = event.target.result;
-                resolve(db);
-            };
-
-            request.onupgradeneeded = event => {
-                const db = event.target.result;
-                db.createObjectStore('files', { keyPath: 'filepath' });
-                console.log("Created object store `files`");
-            };
-        });
-    }
-
     async function storeFiles(files) {
         console.log(files)
         let filesList = Array.from(files)
@@ -96,33 +83,36 @@ function Upload() {
 
     async function storeFile(file) {
         return new Promise(async (resolve, reject) => {
-            const fileReader = new FileReader();
-            fileReader.onload = async event => {
-                try {
-                    const fileContent = event.target.result;
-                    const blob = new Blob([fileContent], { type: file.type });
-
-                    const fileData = {
-                        filename: file.name,
+            if (file.webkitRelativePath.includes('/node_modules/')) {
+                resolve()
+            } else {
+                let fileTitle = file.webkitRelativePath.split("/")[0]
+                if (projectTitle !== fileTitle) {setProjectTitle(fileTitle)}
+                const fileReader = new FileReader();
+                fileReader.onload = async event => {
+                    try {
+                        const fileContent = event.target.result;
+                        const blob = new Blob([fileContent], { type: file.type });
+                        
+                        const fileData = {
+                            filename: file.name,
+                            
                         filepath: file.webkitRelativePath,
                         content: blob,
-                    };
-
-                    if (fileData.filepath.startsWith('react-project/node_modules/')) {
-                        console.log(1)
+                        };
+                        
+                        const db = await openDatabase();
+                        const transaction = db.transaction('files', 'readwrite');
+                        const objectStore = transaction.objectStore('files');
+                        await objectStore.put(fileData);
+                        resolve();
+                    } catch (e) {
+                        reject(e);
                     }
-
-                    const db = await openDatabase();
-                    const transaction = db.transaction('files', 'readwrite');
-                    const objectStore = transaction.objectStore('files');
-                    await objectStore.put(fileData);
-                    resolve();
-                } catch (e) {
-                    reject(e);
-                }
-            };
-
+                };
+            
             fileReader.readAsArrayBuffer(file);
+            }
         });
     }
 
@@ -145,10 +135,25 @@ function Upload() {
         const files = e.target.files;
         setOpenProject("Uploading Project...")
         setIsUploading(true)
-        if (files) { handleUpload() }
+        if (files) { 
+            handleUpload() 
+            const wakeServer = getMessage("Hi!")
+        }
     };
 
+    async function getMessage(messages) {
+        // const proxyUrl = 'http://localhost:3001/gpt-message';
+        const proxyUrl = 'https://reactaiserver.azurewebsites.net/gpt-message';
+        try {
+          const response = await axios.post(proxyUrl, { messages });
+          return response.data
+        } catch (error) {
+          return 'Something went wrong...'
+        }
+    }
+
     useEffect(() => {
+        
         const handleResize = () => {
             setSmallScreen(window.innerWidth < 800 ? true : false);
         };
@@ -162,11 +167,14 @@ function Upload() {
 
     // CREATE NEW APP
     const handleNewAppClick = async () => {
+        setClickedNewApp(true)
         setCreateAppText("Building Project Files...")
         const git_user = "josephgoff-git";
-        const git_repo = "ReactApp";
+        // const git_repo = "react-bootstrap-2";
+        const git_repo = "App4";
         const branch = "master";
-        const proxyUrl = 'http://localhost:3001/github-proxy';
+        // const proxyUrl = 'http://localhost:3001/github-proxy';
+        const proxyUrl = 'https://reactaiserver.azurewebsites.net/github-proxy';
         const githubApiUrl = `https://api.github.com/repos/${git_user}/${git_repo}/zipball/${branch}`;
       
         try {
@@ -181,35 +189,52 @@ function Upload() {
           let process = 0
           const filesArray = [];
           for (const [relativePath, file] of Object.entries(unzippedFiles.files)) {
-            // Check that the given object is actually a file
+            // If file is actually a file
             if (file.dir || file._data.uncompressedSize === 0) {
                 continue;
-            } else  
-            // if (!file.name.includes("node_modules"))
-            {const blob = await file.async('blob');
-            const fileName = file.name;
-            const fileType = blob.type;
-            const fileName1 = fileName.split('/').pop();
-      
-            const fileObject = {
-                blob,
-                name: fileName1,
-                type: fileType,
-                webkitRelativePath: fileName,
-              };
-            filesArray.push(fileObject);}
+            // And if file is not from node modules
+            } else if (file.name.includes("/node_modules/")) {
+                continue
+            // Then proceed to store
+            } else {
+                const blob = await file.async('blob');
+                const fileName = file.name.replace(/^[^/]+\//, 'react-app/');
+                const fileType = blob.type;
+                const fileName1 = fileName.split('/').pop();
+        
+                const fileObject = {
+                    blob,
+                    name: fileName1,
+                    type: fileType,
+                    webkitRelativePath: fileName,
+                };
+                filesArray.push(fileObject);
+            }
             process += 1;
           }
 
           setCreateAppText("Storing Files...")
           await handleGitUpload(filesArray);
-          setCreateAppText("Create React App")
+          setCreateAppText("Create New App")
       
         } catch (error) {
           console.error('Error downloading or processing the zip file:', error);
-          setCreateAppText("Create React App")
+          setCreateAppText("Create New App")
+          setClickedNewApp(false)
         }
     };
+
+    // BUILD
+    // const handleNewAppClick = async () => {
+    //     console.log("getting files")
+    //     let files = await getFilesFromIndexedDB()
+    //     console.log("finished getting files")
+    //     console.log(files)
+
+    //     let response = await sendFilesToServer(files)
+    // }
+
+
 
     // IMPORT FROM GIT
     const handleGitClick = async () => {
@@ -232,7 +257,8 @@ function Upload() {
 
         // Begin fetching zip
         if (branch !== null) {
-            const proxyUrl = 'http://localhost:3001/github-proxy';
+            // const proxyUrl = 'http://localhost:3001/github-proxy';
+            const proxyUrl = 'https://reactaiserver.azurewebsites.net/github-proxy';
             const githubApiUrl = `https://api.github.com/repos/${git_user}/${git_repo}/zipball/${branch}`;
         
             try {
@@ -248,23 +274,27 @@ function Upload() {
             let process = 0
             const filesArray = [];
             for (const [relativePath, file] of Object.entries(unzippedFiles.files)) {
-                // Check that the given object is actually a file
+                // If file is actually a file
                 if (file.dir || file._data.uncompressedSize === 0) {
                     continue;
-                } else  
-                // if (!file.name.includes("node_modules"))
-                {const blob = await file.async('blob');
-                const fileName = file.name;
-                const fileType = blob.type;
-                const fileName1 = fileName.split('/').pop();
-        
-                const fileObject = {
-                    blob,
-                    name: fileName1,
-                    type: fileType,
-                    webkitRelativePath: fileName,
-                };
-                filesArray.push(fileObject);}
+                // And if file is not from node modules
+                } else if (file.name.includes("/node_modules/")) {
+                    continue
+                // Then proceed to store
+                } else {
+                    const blob = await file.async('blob');
+                    const fileName = file.name;
+                    const fileType = blob.type;
+                    const fileName1 = fileName.split('/').pop();
+            
+                    const fileObject = {
+                        blob,
+                        name: fileName1,
+                        type: fileType,
+                        webkitRelativePath: fileName,
+                    };
+                    filesArray.push(fileObject);
+                }
                 process += 1;
             }
 
@@ -282,11 +312,13 @@ function Upload() {
     async function handleGitUpload(files) {
         indexedDB.deleteDatabase("ReactProjectsDatabase");
         console.log("Deleted database");
-
         const db = await openDatabase(); 
+        console.log("Opened new database");
         const transaction = db.transaction('files', 'readwrite');
+        console.log("Began transaction");
         const objectStore = transaction.objectStore('files');
-        await objectStore.clear();
+        console.log("Initiated Object Store");
+        // await objectStore.clear();
         console.log("Cleared database");
 
         if (!files.length) {
@@ -342,6 +374,89 @@ function Upload() {
             fileReader.readAsArrayBuffer(file.blob);
         });
     }
+
+
+
+
+
+
+
+
+
+
+
+
+    async function getFilesFromIndexedDB() {
+        return new Promise((resolve, reject) => {
+            console.log("opening")
+            const request = indexedDB.open('ReactProjectsDatabase'); 
+        
+            request.onsuccess = (event) => {
+                console.log("opened database")
+                const db = event.target.result;
+                const transaction = db.transaction(['files'], 'readonly');
+                const objectStore = transaction.objectStore('files');
+                const files = [];
+                const cursorRequest = objectStore.openCursor();
+            
+                cursorRequest.onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor) {
+                        const file = cursor.value;
+                        if (!file.filepath.includes("/node_modules")) {
+                            console.log(file.filepath) 
+                            files.push(file);
+                        }
+                        cursor.continue();
+                    } else {
+                        resolve(files);
+                    }
+                };
+            
+                cursorRequest.onerror = (e) => {
+                    reject(e.target.error);
+                };
+            }
+        
+            request.onerror = (event) => {
+                reject(event.target.error);
+            };
+        });
+    }
+
+    async function sendFilesToServer(files) {
+        try {
+            const formData = new FormData();
+            files.forEach((fileObj, index) => {
+                const filePath = fileObj.filepath
+                const file = new File([fileObj.content], filePath);
+
+                const pathParts = filePath.split('/');
+                const fileName = pathParts.pop();
+                const relativePath = pathParts.join('/');
+
+
+                formData.append("file", file);
+                formData.append("filenames", `${relativePath}/${fileName}`);
+            });
+        
+            const response = await fetch('http://localhost:3001/upload-files', {
+                method: 'POST',
+                body: formData,
+            });
+        
+            if (response.ok) {
+                console.log('Files sent successfully.');
+            } else {
+                console.error('Error sending files to the server.');
+            }
+        } catch (error) {
+            console.error('An error occurred:', error);
+        }
+    }
+      
+
+
 
     return (
         <div className="app">

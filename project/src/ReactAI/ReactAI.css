@@ -185,6 +185,21 @@ form img {
 
 .hover-dim:hover {
   opacity: 0.7;
+  cursor: pointer;
+}
+
+.hover-dim2:hover {
+  background-color: #999 !important;
+  cursor: pointer;
+}
+
+.hover-dim2:hover > #deleteComponent {
+  opacity: 1 !important;
+}
+
+.component-item:hover > #deleteComponent {
+  opacity: 1 !important;
+  pointer-events: all !important;
 }
 
 .progress-bar {
@@ -205,7 +220,19 @@ form img {
 
 
 
+.select-none {
+  -webkit-user-select: none !important; /* Safari */        
+  -moz-user-select: none !important; /* Firefox */
+  -ms-user-select: none !important; /* IE10+/Edge */
+  user-select: none !important; /* Standard */
+}
 
+.select-none-fix {
+  -webkit-user-select: all !important; /* Safari */        
+  -moz-user-select: all !important; /* Firefox */
+  -ms-user-select: all !important; /* IE10+/Edge */
+  user-select: all !important; /* Standard */
+}
 
 
 

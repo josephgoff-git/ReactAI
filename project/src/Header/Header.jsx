@@ -1,12 +1,29 @@
-import "./Header.css"
+import "./Header.scss"
 import React from 'react'
 import GPTlogo from "../assets/ai.png";
 import logo from "../assets/logo.png"
-import { useHasFilesStore, useShowEditorStore, useShowGPTStore, useShowUploadStore } from "../activitiesStore"
+import { useHasFilesStore, useHeightStore, useShowEditorStore, useShowGPTStore, useShowUploadStore, useWidthStore, useXValStore, useYValStore } from "../activitiesStore"
 import { BsArrowRightCircle } from "react-icons/bs"
 import GPT from "../GPT/GPT"
+import Canvas from "../DraggableList"
 
 const Header = () => {
+
+  var height = useHeightStore((state) => state.height);
+  const setHeight = useHeightStore((state) => state.setHeight);
+
+  var width = useWidthStore((state) => state.width);
+  const setWidth = useWidthStore((state) => state.setWidth);
+
+  var xVal = useXValStore((state) => state.xVal);
+  const setXVal = useXValStore((state) => state.setXVal);
+
+  var yVal = useYValStore((state) => state.yVal);
+  const setYVal = useYValStore((state) => state.setYVal);
+
+
+
+
   var hasFiles = useHasFilesStore((state) => state.hasFiles);
   const setHasFiles = useHasFilesStore((state) => state.setHasFiles);
 
@@ -46,7 +63,7 @@ const Header = () => {
       </div>
 
       <div style={{display: showGPT? "block" : "none", zIndex: 100, position: "fixed", backgroundColor:"black", marginTop: "60px", height: showGPT? "calc(100vh - 60px)" : 0, width: "100%"}}>
-            <GPT/>
+        <GPT/>
       </div>
       
     </div>
