@@ -16,7 +16,6 @@ import path from 'path-browserify';
       request.onupgradeneeded = event => {
         const db = event.target.result;
         db.createObjectStore('files', { keyPath: 'filepath' });
-        console.log("Created object store `files`");
       };
     });
   }  
@@ -40,12 +39,12 @@ import path from 'path-browserify';
   }
 
   export async function storeFile(filePath, fileContents) {
-    const blob = new Blob([fileContents]);
-
+    const blob = fileContents instanceof Blob ? fileContents : new Blob([fileContents])
+    
     const fileData = {
       filename: path.basename(filePath),
       filepath: filePath,
-      content: blob, // Store Blob directly
+      content: blob, 
     };
 
     const db = await openDatabase(); // Open or create the database
@@ -57,7 +56,7 @@ import path from 'path-browserify';
   export async function retrieveFileTree() {
     let filePaths = await retrieveFilePaths();
     let fileTree = {};
-    for (const path of filePaths) {
+    for (let path of filePaths) {
       let components = path.split('/');
       let node = fileTree;
       for (let component of components.slice(0, -1)) {
@@ -149,4 +148,22 @@ import path from 'path-browserify';
       }
     }
     return resolvePath(tree, filePath);
+  }
+
+
+  export async function deleteFile(filePath) {
+    return new Promise(async (resolve, reject) => {
+      const db = await openDatabase(); // Open or create the database
+      const transaction = db.transaction('files', 'readwrite');
+      const objectStore = transaction.objectStore('files');
+      const request = objectStore.delete(filePath);
+  
+      request.onsuccess = event => {
+        resolve('File deleted successfully');
+      };
+  
+      request.onerror = event => {
+        reject('Error deleting file');
+      };
+    });
   }
