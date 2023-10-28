@@ -1,10 +1,26 @@
 import ReactAI from "./ReactAI/ReactAI"
 import Upload from "./Upload/Upload"
 import Header from "./Header/Header"
-import { useHasFilesStore, useShowEditorStore, useShowGPTStore, useShowUploadStore, useFirstBuildStore} from "./activitiesStore";
+import Canvas from "./DraggableList"
+import {useHeightStore, useWidthStore, useXValStore, useYValStore ,  useHasFilesStore, useShowEditorStore, useShowGPTStore, useShowUploadStore, useFirstBuildStore} from "./activitiesStore";
 import { useEffect } from "react";
 
+
 function App() {  
+  var height = useHeightStore((state) => state.height);
+  const setHeight = useHeightStore((state) => state.setHeight);
+
+  var width = useWidthStore((state) => state.width);
+  const setWidth = useWidthStore((state) => state.setWidth);
+
+  var xVal = useXValStore((state) => state.xVal);
+  const setXVal = useXValStore((state) => state.setXVal);
+
+  var yVal = useYValStore((state) => state.yVal);
+  const setYVal = useYValStore((state) => state.setYVal);
+
+
+
   var hasFiles = useHasFilesStore((state) => state.hasFiles);
   const setHasFiles = useHasFilesStore((state) => state.setHasFiles);
 
@@ -49,7 +65,9 @@ function App() {
     <>
       <Header/>
       {hasFiles && showEditor
-        ? <ReactAI/> :  <Upload/>}
+        ? <ReactAI/> :  
+        <Upload/>
+        }
       </>
     );
 }

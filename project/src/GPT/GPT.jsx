@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import "./GPT.css";
+import "./GPT.scss";
 import GPTlogo from "../assets/ai.png";
 import user from "../assets/user.png"
 import logo from "../assets/logo.png"
@@ -7,6 +7,7 @@ import send from "../assets/send.svg";
 import Header from "../Header/Header"
 import { LuSend } from "react-icons/lu"
 import { useHasFilesStore, useShowEditorStore, useShowGPTStore } from "../activitiesStore"
+import axios from "axios";
 
 // height: -webkit-fill-available
 
@@ -58,7 +59,7 @@ const GPT = () => {
     setMessages((prevMessages) => [...prevMessages, { text: userMessage, isBot: false }]);
     form.reset();
 
-    startLoadingAnimation(); // Start the loading animation
+    startLoadingAnimation(); 
     setIsLoading(true);
 
     try {
@@ -73,66 +74,23 @@ const GPT = () => {
   };
 
   async function getMessage(messages) {
-    const formattedMessages = messages.map(message => ({
-      role: message.isBot ? "assistant" : "user",
-      content: message.text
-    }))
-    const options = {
-      method: 'POST',
-      headers: {
-        'Authorization': "Bearer ",
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        // model: "gpt-4",
-        model: "gpt-3.5-turbo",
-        messages: formattedMessages,
-        // max_tokens: 1500,
-        // functions: [
-        //   {
-        //     "name": "write_diff",
-        //     "description": "Generate a code diff using the supplied arguments",
-        //     "parameters": {
-        //       "type": "object",
-        //       "properties": {
-        //         "code": {
-        //           "type": "string",
-        //           "description": "The code you want to write"
-        //         },
-        //       },
-        //       "required": ["code"]
-        //     }
-        //   }
-        // ]
-      })
-    };
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', options);
-    const data = await response.json();
-    const message = data.choices[0].message;
-    if (message.content) {
-      return message.content;
-    }
-    else if (message.function_call) {
-      try {
-        const result = JSON.parse(message.function_call.arguments);
-        return result.code
-      } catch {
-        return message.function_call.arguments;
-      }
-    } 
-    else {
-      return "NO RESPONSE";
+    // const proxyUrl = 'http://localhost:3001/gpt-message';
+    const proxyUrl = 'https://reactaiserver.azurewebsites.net/gpt-message';
+    try {
+      const response = await axios.post(proxyUrl, { messages });
+      return response.data
+    } catch (error) {
+      return 'Something went wrong...'
     }
   }
 
   return (
-    <div id="app">
-      <div id="chat_container">
+    <div id="gpt">
+      <div id="messages">
         {messages.map((message, index) => (
-          <div className={`wrapper ${message.isBot ? 'ai' : ''}`} key={index}>
-            <div className="chat">
-              <div className="profile">
+          <div className={`bar ${message.isBot ? 'ai' : ''}`} key={index}>
+            <div className="elements">
+              <div className="image">
                 <img src={message.isBot ? GPTlogo : user} alt={message.isBot ? 'bot' : 'user'} />
               </div>
               <div className="message">{message.text}</div>
@@ -140,9 +98,9 @@ const GPT = () => {
           </div>
         ))}
         {isLoading && (
-          <div className="wrapper ai">
-            <div className="chat">
-              <div className="profile">
+          <div className="bar ai">
+            <div className="elements">
+              <div className="image">
                 <img src={GPTlogo} alt="bot"/>
               </div>
               <div className="message">{loading}</div>
@@ -151,7 +109,7 @@ const GPT = () => {
         )}
       </div>
 
-      <form onSubmit={handleSubmit} ref={formRef}>
+      <form className="form" onSubmit={handleSubmit} ref={formRef}>
         <textarea onKeyPress={handleTextareaKeyPress} style={{ resize: "none" }} name="prompt" rows="1" cols="1" placeholder="Ask me something..."></textarea>
         <button type="submit" style={{paddingRight: "10px"}}>
           <LuSend color="white" fontSize={25} style={{transform: "rotate(45deg)"}}/>
